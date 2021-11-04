@@ -19,6 +19,7 @@ import llnl.util.filesystem as fs
 import spack.hooks.sbang as sbang
 import spack.paths
 import spack.store
+import spack.util.spack_yaml as syaml
 from spack.util.executable import which
 
 too_long = sbang.shebang_limit + 1
@@ -189,25 +190,37 @@ def test_shebang_handles_non_writable_files(script_dir, sbang_line):
     assert oct(not_writable_mode) == oct(st.st_mode)
 
 
+@pytest.fixture()
+def configure_permissions():
+    conf = syaml.load_config("""\
+all:
+  permissions:
+    read: world
+    write: world
+""")
+    spack.config.set('packages', conf, scope='user')
+
+    yield
+
+
 def check_sbang_installation():
     sbang_path = sbang.sbang_install_path()
+    sbang_bin_dir = os.path.dirname(sbang_path)
     assert sbang_path.startswith(spack.store.store.unpadded_root)
 
     assert os.path.exists(sbang_path)
     assert fs.is_exe(sbang_path)
 
-
-def check_sbang_bin_dir_permissions():
-    sbang_path = sbang.sbang_install_path()
-    sbang_bin_dir = os.path.dirname(sbang_path)
     status = os.stat(sbang_bin_dir)
-    if spack.package_prefs.get_package_group(spack.spec.Spec("all")):
-        assert (status.st_mode & 0o777) == 0o775
-    else:
-        assert(status.st_mode & 0o777) == 0o755
+    mode = (status.st_mode & 0o777)
+    assert mode == 0o755, 'Unexpected {0}'.format(oct(mode))
+
+    status = os.stat(sbang_path)
+    mode = (status.st_mode & 0o777)
+    assert mode == 0o777, 'Unexpected {0}'.format(oct(mode))
 
 
-def test_install_sbang(install_mockery):
+def test_install_sbang(install_mockery, configure_permissions):
     sbang_path = sbang.sbang_install_path()
     sbang_bin_dir = os.path.dirname(sbang_path)
 
@@ -224,9 +237,7 @@ def test_install_sbang(install_mockery):
 
     sbang.install_sbang()
     check_sbang_installation()
-    check_sbang_bin_dir_permissions()
 
     # install again and make sure sbang is still fine
     sbang.install_sbang()
     check_sbang_installation()
-    check_sbang_bin_dir_permissions()
