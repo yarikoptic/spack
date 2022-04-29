@@ -22,6 +22,7 @@ class Nekrs(Package, CudaPackage, ROCmPackage):
     maintainers = ['thilinarmtb', 'stgeke']
 
     version('21.0', tag='v21.0')
+    version('22.0', branch='next')
 
     variant('opencl',
             default=False,
@@ -113,6 +114,7 @@ class Nekrs(Package, CudaPackage, ROCmPackage):
 
     def install(self, spec, prefix):
         script_dir = 'scripts'
+        build_dir = 'build'
 
         with working_dir(script_dir):
             # Make sure nekmpi wrapper uses srun when we know OpenMPI
@@ -121,13 +123,25 @@ class Nekrs(Package, CudaPackage, ROCmPackage):
                 filter_file(r'mpirun -np', 'srun -n', 'nrsmpi')
                 filter_file(r'mpirun -np', 'srun -n', 'nrspre')
                 filter_file(r'mpirun -np', 'srun -n', 'nrsbmpi')
+                if self.spec.satisfies('@22.0:'):
+                    filter_file(r'mpirun -np', 'srun -n', 'nrsqsub_slurm')
+                    filter_file(r'mpirun -np', 'srun -n', 'nrsqsub_summit')
 
-        makenrs = Executable(os.path.join(os.getcwd(), "makenrs"))
+        if self.spec.satisfies('@22.0:'):
+            nrsconfig = Executable(os.path.join(os.getcwd(), "nrsconfig"))
+        else:
+            nrsconfig = Executable(os.path.join(os.getcwd(), "makenrs"))
 
-        makenrs.add_default_env("NEKRS_INSTALL_DIR", prefix)
-        makenrs.add_default_env("NEKRS_CC", spec['mpi'].mpicc)
-        makenrs.add_default_env("NEKRS_CXX", spec['mpi'].mpicxx)
-        makenrs.add_default_env("NEKRS_FC", spec['mpi'].mpifc)
-        makenrs.add_default_env("TRAVIS", "true")
+        nrsconfig.add_default_env("NEKRS_INSTALL_DIR", prefix)
+        nrsconfig.add_default_env("NEKRS_CC", spec['mpi'].mpicc)
+        nrsconfig.add_default_env("NEKRS_CXX", spec['mpi'].mpicxx)
+        nrsconfig.add_default_env("NEKRS_FC", spec['mpi'].mpifc)
 
-        makenrs(output=str, error=str, fail_on_error=True)
+        if self.spec.satisfies('@:22.0'):
+            nrsconfig.add_default_env("TRAVIS", "true")
+
+        nrsconfig(output=str, error=str, fail_on_error=True)
+
+        if self.spec.satisfies('@22.0:'):
+            with working_dir(build_dir):
+                make("install")
