@@ -20,7 +20,7 @@ import spack.schema.projections
 #: IS ADDED IMMEDIATELY BELOW THE MODULE TYPE ATTRIBUTE
 spec_regex = r'(?!hierarchy|core_specs|verbose|hash_length|whitelist|' \
              r'blacklist|projections|naming_scheme|core_compilers|all|' \
-             r'defaults)(^\w[\w-]*)'
+             r'defaults|filter_hierarchy_specs)(^\w[\w-]*)'
 
 #: Matches a valid name for a module set
 valid_module_set_name = r'^(?!arch_folder$|lmod$|roots$|enable$|prefix_inspections$|'\
@@ -150,6 +150,12 @@ module_config_properties = {
                     'core_compilers': array_of_strings,
                     'hierarchy': array_of_strings,
                     'core_specs': array_of_strings,
+                    'filter_hierarchy_specs': {
+                        'type': 'object',
+                        'patternProperties': {
+                            spec_regex: array_of_strings
+                        }
+                    }
                 },
             }  # Specific lmod extensions
         ]
