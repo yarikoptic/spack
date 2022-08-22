@@ -14,11 +14,11 @@ class HashTest3(Package):
     homepage = "http://www.hashtest3.org"
     url = "http://www.hashtest1.org/downloads/hashtest3-1.1.tar.bz2"
 
-    version("1.2", "b" * 32)
-    version("1.3", "c" * 32)
-    version("1.5", "d" * 32)
-    version("1.6", "e" * 32)
-    version("1.7", "f" * 32)
+    version("1.2", sha256="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    version("1.3", sha256="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")
+    version("1.5", sha256="dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd")
+    version("1.6", sha256="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
+    version("1.7", sha256="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
 
     variant("variantx", default=False, description="Test variant X")
     variant("varianty", default=False, description="Test variant Y")

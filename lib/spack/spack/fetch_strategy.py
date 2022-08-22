@@ -49,6 +49,7 @@ import spack.error
 import spack.url
 import spack.util.crypto as crypto
 import spack.util.pattern as pattern
+import spack.util.spack_yaml as syaml
 import spack.util.url as url_util
 import spack.util.web as web_util
 import spack.version
@@ -123,6 +124,20 @@ class FetchStrategy(object):
         self.cache_enabled = not kwargs.pop("no_cache", False)
 
         self.package = None
+
+    def spec_attrs(self):
+        """Create a dictionary of attributes that describe this fetch strategy for a Spec.
+
+        This is included in the serialized Spec format to store provenance (like hashes).
+        """
+        attrs = syaml.syaml_dict()
+        if self.url_attr:
+            attrs["type"] = "archive" if self.url_attr == "url" else self.url_attr
+        for attr in self.optional_attrs:
+            value = getattr(self, attr, None)
+            if value:
+                attrs[attr] = value
+        return attrs
 
     def set_package(self, package):
         self.package = package
@@ -291,6 +306,16 @@ class URLFetchStrategy(FetchStrategy):
 
         if not self.url:
             raise ValueError("URLFetchStrategy requires a url for fetching.")
+
+    def spec_attrs(self):
+        attrs = super(URLFetchStrategy, self).spec_attrs()
+        if self.digest:
+            try:
+                hash_type = spack.util.crypto.hash_algo_for_digest(self.digest)
+            except ValueError:
+                hash_type = "digest"
+            attrs[hash_type] = self.digest
+        return attrs
 
     @property
     def curl(self):
