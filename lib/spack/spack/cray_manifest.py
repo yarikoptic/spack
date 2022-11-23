@@ -6,7 +6,7 @@
 import json
 
 import jsonschema
-import six
+import jsonschema.exceptions
 
 import llnl.util.tty as tty
 
@@ -96,7 +96,7 @@ def spec_from_entry(entry):
                 continue
 
             # Value could be a list (of strings), boolean, or string
-            if isinstance(value, six.string_types):
+            if isinstance(value, str):
                 variant_strs.append("{0}={1}".format(name, value))
             else:
                 try:
@@ -161,10 +161,14 @@ def entries_to_specs(entries):
 
 
 def read(path, apply_updates):
-    with open(path, "r") as json_file:
-        json_data = json.load(json_file)
+    decode_exception_type = json.decoder.JSONDecodeError
+    try:
+        with open(path, "r") as json_file:
+            json_data = json.load(json_file)
 
-    jsonschema.validate(json_data, manifest_schema)
+        jsonschema.validate(json_data, manifest_schema)
+    except (jsonschema.exceptions.ValidationError, decode_exception_type) as e:
+        raise ManifestValidationError("error parsing manifest JSON:", str(e)) from e
 
     specs = entries_to_specs(json_data["specs"])
     tty.debug("{0}: {1} specs read from manifest".format(path, str(len(specs))))
@@ -179,3 +183,8 @@ def read(path, apply_updates):
     if apply_updates:
         for spec in specs.values():
             spack.store.db.add(spec, directory_layout=None)
+
+
+class ManifestValidationError(spack.error.SpackError):
+    def __init__(self, msg, long_msg=None):
+        super(ManifestValidationError, self).__init__(msg, long_msg)

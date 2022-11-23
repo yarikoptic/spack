@@ -15,8 +15,7 @@ import platform
 import re
 import sys
 import sysconfig
-
-import six
+import uuid
 
 import archspec.cpu
 
@@ -40,9 +39,12 @@ import spack.util.executable
 import spack.util.path
 import spack.util.spack_yaml
 import spack.util.url
+import spack.version
 
 #: Name of the file containing metadata about the bootstrapping source
 METADATA_YAML_FILENAME = "metadata.yaml"
+
+is_windows = sys.platform == "win32"
 
 #: Map a bootstrapper type to the corresponding class
 _bootstrap_methods = {}
@@ -74,7 +76,7 @@ def _try_import_from_store(module, query_spec, query_info=None):
             command found and the concrete spec providing it
     """
     # If it is a string assume it's one of the root specs by this module
-    if isinstance(query_spec, six.string_types):
+    if isinstance(query_spec, str):
         # We have to run as part of this python interpreter
         query_spec += " ^" + spec_for_current_python()
 
@@ -87,6 +89,7 @@ def _try_import_from_store(module, query_spec, query_info=None):
             os.path.join(candidate_spec.prefix, pkg.platlib),
         ]  # type: list[str]
         path_before = list(sys.path)
+
         # NOTE: try module_paths first and last, last allows an existing version in path
         # to be picked up and used, possibly depending on something in the store, first
         # allows the bootstrap version to work when an incompatible version is in
@@ -260,12 +263,11 @@ class _BootstrapperBase(object):
 class _BuildcacheBootstrapper(_BootstrapperBase):
     """Install the software needed during bootstrapping from a buildcache."""
 
-    config_scope_name = "bootstrap_buildcache"
-
     def __init__(self, conf):
         super(_BuildcacheBootstrapper, self).__init__(conf)
         self.metadata_dir = spack.util.path.canonicalize_path(conf["metadata"])
         self.last_search = None
+        self.config_scope_name = "bootstrap_buildcache-{}".format(uuid.uuid4())
 
     @staticmethod
     def _spec_and_platform(abstract_spec_str):
@@ -378,13 +380,12 @@ class _BuildcacheBootstrapper(_BootstrapperBase):
 class _SourceBootstrapper(_BootstrapperBase):
     """Install the software needed during bootstrapping from sources."""
 
-    config_scope_name = "bootstrap_source"
-
     def __init__(self, conf):
         super(_SourceBootstrapper, self).__init__(conf)
         self.metadata_dir = spack.util.path.canonicalize_path(conf["metadata"])
         self.conf = conf
         self.last_search = None
+        self.config_scope_name = "bootstrap_source-{}".format(uuid.uuid4())
 
     def try_import(self, module, abstract_spec_str):
         info = {}
@@ -466,21 +467,14 @@ def source_is_enabled_or_raise(conf):
 
 def spec_for_current_python():
     """For bootstrapping purposes we are just interested in the Python
-    minor version (all patches are ABI compatible with the same minor)
-    and on whether ucs4 support has been enabled for Python 2.7
+    minor version (all patches are ABI compatible with the same minor).
 
     See:
       https://www.python.org/dev/peps/pep-0513/
       https://stackoverflow.com/a/35801395/771663
     """
     version_str = ".".join(str(x) for x in sys.version_info[:2])
-    variant_str = ""
-    if sys.version_info[0] == 2 and sys.version_info[1] == 7:
-        unicode_size = sysconfig.get_config_var("Py_UNICODE_SIZE")
-        variant_str = "+ucs4" if unicode_size == 4 else "~ucs4"
-
-    spec_fmt = "python@{0} {1}"
-    return spec_fmt.format(version_str, variant_str)
+    return "python@{0}".format(version_str)
 
 
 @contextlib.contextmanager
@@ -655,12 +649,19 @@ def _add_externals_if_missing():
         # GnuPG
         spack.repo.path.get_pkg_class("gawk"),
     ]
+    if is_windows:
+        search_list.append(spack.repo.path.get_pkg_class("winbison"))
     detected_packages = spack.detection.by_executable(search_list)
     spack.detection.update_configuration(detected_packages, scope="bootstrap")
 
 
 #: Reference counter for the bootstrapping configuration context manager
 _REF_COUNT = 0
+
+
+def is_bootstrapping():
+    global _REF_COUNT
+    return _REF_COUNT > 0
 
 
 @contextlib.contextmanager
@@ -788,17 +789,46 @@ def ensure_gpg_in_path_or_raise():
 
 def patchelf_root_spec():
     """Return the root spec used to bootstrap patchelf"""
-    # TODO: patchelf is restricted to v0.13 since earlier versions have
-    # TODO: bugs that we don't to deal with, while v0.14 requires a C++17
-    # TODO: which may not be available on all platforms.
-    return _root_spec("patchelf@0.13.1:0.13.99")
+    # 0.13.1 is the last version not to require C++17.
+    return _root_spec("patchelf@0.13.1:")
+
+
+def verify_patchelf(patchelf):
+    """Older patchelf versions can produce broken binaries, so we
+    verify the version here.
+
+    Arguments:
+
+        patchelf (spack.util.executable.Executable): patchelf executable
+    """
+    out = patchelf("--version", output=str, error=os.devnull, fail_on_error=False).strip()
+    if patchelf.returncode != 0:
+        return False
+    parts = out.split(" ")
+    if len(parts) < 2:
+        return False
+    try:
+        version = spack.version.Version(parts[1])
+    except ValueError:
+        return False
+    return version >= spack.version.Version("0.13.1")
 
 
 def ensure_patchelf_in_path_or_raise():
     """Ensure patchelf is in the PATH or raise."""
-    return ensure_executables_in_path_or_raise(
-        executables=["patchelf"], abstract_spec=patchelf_root_spec()
-    )
+    # The old concretizer is not smart and we're doing its job: if the latest patchelf
+    # does not concretize because the compiler doesn't support C++17, we try to
+    # concretize again with an upperbound @:13.
+    try:
+        return ensure_executables_in_path_or_raise(
+            executables=["patchelf"], abstract_spec=patchelf_root_spec(), cmd_check=verify_patchelf
+        )
+    except RuntimeError:
+        return ensure_executables_in_path_or_raise(
+            executables=["patchelf"],
+            abstract_spec=_root_spec("patchelf@0.13.1:0.13"),
+            cmd_check=verify_patchelf,
+        )
 
 
 ###
@@ -827,9 +857,7 @@ def ensure_mypy_in_path_or_raise():
 
 
 def black_root_spec():
-    # black v21 is the last version to support Python 2.7.
-    # Upgrade when we no longer support Python 2.7
-    return _root_spec("py-black@:21")
+    return _root_spec("py-black")
 
 
 def ensure_black_in_path_or_raise():
@@ -886,7 +914,7 @@ def _missing(name, purpose, system_only=True):
 
 def _required_system_executable(exes, msg):
     """Search for an executable is the system path only."""
-    if isinstance(exes, six.string_types):
+    if isinstance(exes, str):
         exes = (exes,)
     if spack.util.executable.which_string(*exes):
         return True, None
@@ -904,7 +932,7 @@ def _required_python_module(module, query_spec, msg):
 
 def _required_executable(exes, query_spec, msg):
     """Search for an executable in the system path or in the bootstrap store."""
-    if isinstance(exes, six.string_types):
+    if isinstance(exes, str):
         exes = (exes,)
     if spack.util.executable.which_string(*exes) or _executables_in_store(exes, query_spec):
         return True, None
