@@ -15,6 +15,9 @@ import sys
 import llnl.util.tty as tty
 
 import spack
+import spack.paths
+import spack.util.environment as sue
+import spack.util.executable as exe
 
 description = "launch an interpreter as spack would launch a command"
 section = "developer"
@@ -118,21 +121,38 @@ def ipython_interpreter(args):
 
 def python_interpreter(args):
     """A python interpreter is the default interpreter"""
-    # Fake a main python shell by setting __name__ to __main__.
-    console = code.InteractiveConsole({"__name__": "__main__", "spack": spack})
-    if "PYTHONSTARTUP" in os.environ:
-        startup_file = os.environ["PYTHONSTARTUP"]
-        if os.path.isfile(startup_file):
-            with open(startup_file) as startup:
-                console.runsource(startup.read(), startup_file, "exec")
+    if args.python_command or args.python_args:
+        # create a new environment for the spack python instance that sets PYTHONPATH to
+        # include Spack packages.
+        mods = sue.EnvironmentModifications()
+        mods.prepend_path("PYTHONPATH", spack.paths.lib_path)
+        mods.prepend_path("PYTHONPATH", spack.paths.external_path)
 
-    if args.python_command:
-        console.runsource(args.python_command)
-    elif args.python_args:
-        sys.argv = args.python_args
-        with open(args.python_args[0]) as file:
-            console.runsource(file.read(), args.python_args[0], "exec")
+        env = os.environ.copy()
+        mods.apply_modifications(env)
+
+        # if we're not running an interactive console, exec python and don't bother with
+        # an interactive interpreter, since that means things like the __main__ module
+        # will not be defined, and multiprocessing won't work.
+        python_args = []
+        if args.python_command:
+            python_args += ["-c", args.python_command]
+        if args.python_args:
+            python_args += args.python_args
+
+        python = exe.Executable(sys.executable)
+        python(*python_args, env=env)
+
     else:
+        # if we're running interactively, use InteractiveConsole and set up a little
+        # readline help.
+        console = code.InteractiveConsole({"spack": spack})
+        if "PYTHONSTARTUP" in os.environ:
+            startup_file = os.environ["PYTHONSTARTUP"]
+            if os.path.isfile(startup_file):
+                with open(startup_file) as startup:
+                    console.runsource(startup.read(), startup_file, "exec")
+
         # Provides readline support, allowing user to use arrow keys
         console.push("import readline")
         # Provide tabcompletion
