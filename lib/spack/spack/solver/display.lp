@@ -25,4 +25,8 @@
 #show error/6.
 #show error/7.
 
+% show cause -> effect data for errors
+#show condition_cause/2.
+#show condition/2.
+
 % debug

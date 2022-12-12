@@ -1213,7 +1213,7 @@ class SpackSolverSetup(object):
                 if not deptypes:
                     continue
 
-                msg = "%s depends on %s" % (pkg.name, dep.spec.name)
+                msg = "%s depends on %s" % (pkg.name, dep.spec)
                 if cond != spack.spec.Spec():
                     msg += " when %s" % cond
 
