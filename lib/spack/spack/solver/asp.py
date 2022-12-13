@@ -640,13 +640,16 @@ class PyclingoDriver(object):
         if choice:
             self.assumptions.append(atom)
 
-    def _get_cause_tree(self, cause, conditions, condition_causes, literals, indent=''):
+    def _get_cause_tree(self, cause, conditions, condition_causes, literals, indent=""):
         parents = [c for e, c in condition_causes if e == cause]
         local = "required because %s " % conditions[cause]
 
         return [indent + local] + [
-            c for parent in parents
-            for c in self._get_cause_tree(parent, conditions, condition_causes, literals, indent=indent + '  ')
+            c
+            for parent in parents
+            for c in self._get_cause_tree(
+                parent, conditions, condition_causes, literals, indent=indent + "  "
+            )
         ]
 
     def get_cause_tree(self, result, best_model, cause):
@@ -663,7 +666,7 @@ class PyclingoDriver(object):
             cause_args = []
         else:
             msg_args = args[:idx]
-            cause_args = args[idx + 1:]
+            cause_args = args[idx + 1 :]
 
         msg = msg.format(*msg_args)
 
@@ -1217,9 +1220,11 @@ class SpackSolverSetup(object):
             for when in whens:
                 msg = "%s provides %s when %s" % (pkg.name, provided, when)
                 condition_id = self.condition(when, provided, pkg.name, msg)
-                self.gen.fact(fn.imposed_constraint(
-                    condition_id, "virtual_condition_holds", pkg.name, provided.name
-                ))
+                self.gen.fact(
+                    fn.imposed_constraint(
+                        condition_id, "virtual_condition_holds", pkg.name, provided.name
+                    )
+                )
             self.gen.newline()
 
     def package_dependencies_rules(self, pkg):
@@ -1249,9 +1254,11 @@ class SpackSolverSetup(object):
 
                 for t in sorted(deptypes):
                     # there is a declared dependency of type t
-                    self.gen.fact(fn.imposed_constraint(
-                        condition_id, "dependency_holds", pkg.name, dep.spec.name, t
-                    ))
+                    self.gen.fact(
+                        fn.imposed_constraint(
+                            condition_id, "dependency_holds", pkg.name, dep.spec.name, t
+                        )
+                    )
 
                 self.gen.newline()
 
@@ -1357,9 +1364,11 @@ class SpackSolverSetup(object):
             for local_idx, spec in enumerate(external_specs):
                 msg = "%s available as external when satisfying %s" % (spec.name, spec)
                 condition_id = self.condition(spec, msg=msg)
-                self.gen.fact(fn.imposed_constraint(
-                    condition_id, "external_conditions_hold", pkg_name, local_idx
-                ))
+                self.gen.fact(
+                    fn.imposed_constraint(
+                        condition_id, "external_conditions_hold", pkg_name, local_idx
+                    )
+                )
                 self.possible_versions[spec.name].add(spec.version)
                 self.gen.newline()
 
@@ -2169,16 +2178,20 @@ class SpackSolverSetup(object):
 
             self.gen.fact(fn.condition_requirement(condition_id, "literal_solved", condition_id))
 
-            self.gen.fact(fn.imposed_constraint(
-                condition_id, "virtual_root" if spec.virtual else "root", spec.name
-            ))
+            self.gen.fact(
+                fn.imposed_constraint(
+                    condition_id, "virtual_root" if spec.virtual else "root", spec.name
+                )
+            )
 
             for clause in self.spec_clauses(spec):
                 self.gen.fact(fn.imposed_constraint(condition_id, *clause.args))
                 if clause.args[0] == "variant_set":
-                    self.gen.fact(fn.imposed_constraint(
-                        condition_id, "variant_default_value_from_cli", *clause.args[1:]
-                    ))
+                    self.gen.fact(
+                        fn.imposed_constraint(
+                            condition_id, "variant_default_value_from_cli", *clause.args[1:]
+                        )
+                    )
 
         if self.concretize_everything:
             self.gen.fact(fn.concretize_everything())
