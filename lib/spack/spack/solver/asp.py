@@ -667,16 +667,16 @@ class PyclingoDriver(object):
 
         msg = msg.format(*msg_args)
 
-        for cause in set(cause_args):
-            for c in self.get_cause_tree(result, best_model, cause):
-                print(c)
-
         # For variant formatting, we sometimes have to construct specs
         # to format values properly. Find/replace all occurances of
         # Spec(...) with the string representation of the spec mentioned
         specs_to_construct = re.findall(r"Spec\(([^)]*)\)", msg)
         for spec_str in specs_to_construct:
             msg = msg.replace("Spec(%s)" % spec_str, str(spack.spec.Spec(spec_str)))
+
+        for cause in set(cause_args):
+            for c in self.get_cause_tree(result, best_model, cause):
+                msg += "\n" + c
 
         # TODO: this raises early -- we should handle multiple errors if there are any.
         raise UnsatisfiableSpecError(msg)
