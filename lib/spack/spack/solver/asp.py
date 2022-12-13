@@ -787,11 +787,12 @@ class PyclingoDriver(object):
             # first check for errors
             error_args = extract_args(best_model, "error")
             errors = sorted((int(priority), msg, args) for priority, msg, *args in error_args)
+            # build specs from spec attributes in the model
+            spec_attrs = [(name, tuple(rest)) for name, *rest in extract_args(best_model, "attr")]
+
             for _, msg, args in errors:
                 self.handle_error(result, best_model, msg, *args)
 
-            # build specs from spec attributes in the model
-            spec_attrs = [(name, tuple(rest)) for name, *rest in extract_args(best_model, "attr")]
             answers = builder.build_specs(spec_attrs)
 
             # add best spec to the results
